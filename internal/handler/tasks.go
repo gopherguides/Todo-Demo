@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +12,11 @@ import (
 	"todo-demo/internal/database/sqlc"
 	mw "todo-demo/internal/middleware"
 	"todo-demo/templates/components"
+)
+
+var (
+	validStatuses   = []string{"todo", "in_progress", "done"}
+	validPriorities = []string{"low", "medium", "high", "urgent"}
 )
 
 func (h *Handler) CreateTask(c echo.Context) error {
@@ -26,9 +32,15 @@ func (h *Handler) CreateTask(c echo.Context) error {
 	if priority == "" {
 		priority = "medium"
 	}
+	if !slices.Contains(validPriorities, priority) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid priority")
+	}
 	status := c.FormValue("status")
 	if status == "" {
 		status = "todo"
+	}
+	if !slices.Contains(validStatuses, status) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status")
 	}
 	dueDate := c.FormValue("due_date")
 
@@ -105,6 +117,15 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "title is required")
 	}
 
+	priority := c.FormValue("priority")
+	if !slices.Contains(validPriorities, priority) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid priority")
+	}
+	status := c.FormValue("status")
+	if !slices.Contains(validStatuses, status) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status")
+	}
+
 	dueDate := c.FormValue("due_date")
 	var dueDateNull sql.NullString
 	if dueDate != "" {
@@ -114,8 +135,8 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 	task, err := h.queries.UpdateTask(c.Request().Context(), sqlc.UpdateTaskParams{
 		Title:       title,
 		Description: c.FormValue("description"),
-		Priority:    c.FormValue("priority"),
-		Status:      c.FormValue("status"),
+		Priority:    priority,
+		Status:      status,
 		DueDate:     dueDateNull,
 		ID:          id,
 		UserID:      userID,

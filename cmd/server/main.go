@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"syscall"
 
 	"github.com/labstack/echo/v4"
 
@@ -87,7 +88,10 @@ func findOpenPort(startPort, maxAttempts int) (net.Listener, int, error) {
 func isAddrInUse(err error) bool {
 	var opErr *net.OpError
 	if errors.As(err, &opErr) {
-		return opErr.Op == "listen"
+		var syscallErr *os.SyscallError
+		if errors.As(opErr.Err, &syscallErr) {
+			return errors.Is(syscallErr.Err, syscall.EADDRINUSE)
+		}
 	}
 	return false
 }
