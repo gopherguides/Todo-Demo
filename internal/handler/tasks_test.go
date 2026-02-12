@@ -103,3 +103,37 @@ func TestDeleteTask(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec2.Code)
 	}
 }
+
+func TestUpdateTaskStatusChangeRefreshesBoard(t *testing.T) {
+	h := newTestHandler(t)
+	e := echo.New()
+
+	createForm := "title=Original&description=A+test&priority=medium&status=todo"
+	createReq := httptest.NewRequest(http.MethodPost, "/tasks", strings.NewReader(createForm))
+	createReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	createReq = createReq.WithContext(context.WithValue(createReq.Context(), ctxkeys.UserID, "test-user-1"))
+	createRec := httptest.NewRecorder()
+	createCtx := e.NewContext(createReq, createRec)
+	if err := h.CreateTask(createCtx); err != nil {
+		t.Fatalf("CreateTask() setup error: %v", err)
+	}
+
+	updateForm := "title=Updated&description=A+test&priority=high&status=done&due_date="
+	updateReq := httptest.NewRequest(http.MethodPut, "/tasks/1", strings.NewReader(updateForm))
+	updateReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	updateReq = updateReq.WithContext(context.WithValue(updateReq.Context(), ctxkeys.UserID, "test-user-1"))
+	updateRec := httptest.NewRecorder()
+	updateCtx := e.NewContext(updateReq, updateRec)
+	updateCtx.SetParamNames("id")
+	updateCtx.SetParamValues("1")
+
+	if err := h.UpdateTask(updateCtx); err != nil {
+		t.Fatalf("UpdateTask() returned error: %v", err)
+	}
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, updateRec.Code)
+	}
+	if updateRec.Header().Get("HX-Refresh") != "true" {
+		t.Fatalf("expected HX-Refresh true, got %q", updateRec.Header().Get("HX-Refresh"))
+	}
+}

@@ -110,6 +110,7 @@ func (h *Handler) EditTask(c echo.Context) error {
 
 func (h *Handler) UpdateTask(c echo.Context) error {
 	userID := mw.GetUserID(c)
+	ctx := c.Request().Context()
 
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -130,24 +131,31 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid status")
 	}
 
-	oldTask, err := h.queries.GetTask(c.Request().Context(), sqlc.GetTaskParams{
-		ID:     id,
-		UserID: userID,
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusNotFound, "task not found")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get task")
-	}
-
 	dueDate := c.FormValue("due_date")
 	var dueDateNull sql.NullString
 	if dueDate != "" {
 		dueDateNull = sql.NullString{String: dueDate, Valid: true}
 	}
 
-	task, err := h.queries.UpdateTask(c.Request().Context(), sqlc.UpdateTaskParams{
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start transaction")
+	}
+	txQueries := h.queries.WithTx(tx)
+
+	oldTask, err := txQueries.GetTask(ctx, sqlc.GetTaskParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get task")
+	}
+
+	task, err := txQueries.UpdateTask(ctx, sqlc.UpdateTaskParams{
 		Title:       title,
 		Description: c.FormValue("description"),
 		Priority:    priority,
@@ -157,18 +165,22 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		UserID:      userID,
 	})
 	if err != nil {
+		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
 			return echo.NewHTTPError(http.StatusNotFound, "task not found")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update task")
 	}
 
+	statusChanged := oldTask.Status != status
+
 	if oldTask.Status != status {
-		maxPos, err := h.queries.GetMaxPosition(c.Request().Context(), sqlc.GetMaxPositionParams{
+		maxPos, err := txQueries.GetMaxPosition(ctx, sqlc.GetMaxPositionParams{
 			UserID: userID,
 			Status: status,
 		})
 		if err != nil {
+			_ = tx.Rollback()
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get position for new status")
 		}
 		var position float64
@@ -180,16 +192,23 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		default:
 			position = 1024
 		}
-		_, err = h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
+		_, err = txQueries.UpdateTaskPosition(ctx, sqlc.UpdateTaskPositionParams{
 			Status:   status,
 			Position: position,
 			ID:       id,
 			UserID:   userID,
 		})
 		if err != nil {
+			_ = tx.Rollback()
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to update task position")
 		}
+	}
 
+	if err := tx.Commit(); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit task update")
+	}
+
+	if statusChanged {
 		c.Response().Header().Set("HX-Refresh", "true")
 		return c.NoContent(http.StatusOK)
 	}

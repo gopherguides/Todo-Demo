@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -77,10 +78,7 @@ func (h *Handler) calculatePosition(c echo.Context, userID string, req moveReque
 	ctx := c.Request().Context()
 
 	if req.AfterID != 0 && req.BeforeID == 0 {
-		afterPos, err := h.queries.GetTaskPosition(ctx, sqlc.GetTaskPositionParams{
-			ID:     req.AfterID,
-			UserID: userID,
-		})
+		afterPos, err := h.positionForStatus(ctx, userID, req.Status, req.AfterID)
 		if err != nil {
 			return 0, err
 		}
@@ -88,28 +86,19 @@ func (h *Handler) calculatePosition(c echo.Context, userID string, req moveReque
 	}
 
 	if req.AfterID == 0 && req.BeforeID != 0 {
-		beforePos, err := h.queries.GetTaskPosition(ctx, sqlc.GetTaskPositionParams{
-			ID:     req.BeforeID,
-			UserID: userID,
-		})
+		beforePos, err := h.positionForStatus(ctx, userID, req.Status, req.BeforeID)
 		if err != nil {
 			return 0, err
 		}
 		return beforePos / 2, nil
 	}
 
-	afterPos, err := h.queries.GetTaskPosition(ctx, sqlc.GetTaskPositionParams{
-		ID:     req.AfterID,
-		UserID: userID,
-	})
+	afterPos, err := h.positionForStatus(ctx, userID, req.Status, req.AfterID)
 	if err != nil {
 		return 0, err
 	}
 
-	beforePos, err := h.queries.GetTaskPosition(ctx, sqlc.GetTaskPositionParams{
-		ID:     req.BeforeID,
-		UserID: userID,
-	})
+	beforePos, err := h.positionForStatus(ctx, userID, req.Status, req.BeforeID)
 	if err != nil {
 		return 0, err
 	}
@@ -137,4 +126,18 @@ func (h *Handler) nextPosition(c echo.Context, userID string, status string) (fl
 
 func isStaleNeighborError(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
+}
+
+func (h *Handler) positionForStatus(ctx context.Context, userID string, status string, id int64) (float64, error) {
+	task, err := h.queries.GetTask(ctx, sqlc.GetTaskParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if task.Status != status {
+		return 0, sql.ErrNoRows
+	}
+	return task.Position, nil
 }
