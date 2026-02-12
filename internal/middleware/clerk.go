@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
@@ -11,11 +12,22 @@ import (
 	"todo-demo/internal/ctxkeys"
 )
 
+func isAPIRequest(c echo.Context) bool {
+	if c.Request().Header.Get("HX-Request") == "true" {
+		return true
+	}
+	accept := c.Request().Header.Get("Accept")
+	return strings.Contains(accept, "application/json")
+}
+
 func ClerkAuth() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			sessionToken, err := c.Cookie("__session")
 			if err != nil {
+				if isAPIRequest(c) {
+					return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+				}
 				return c.Redirect(http.StatusFound, "/sign-in")
 			}
 
@@ -23,6 +35,9 @@ func ClerkAuth() echo.MiddlewareFunc {
 				Token: sessionToken.Value,
 			})
 			if err != nil {
+				if isAPIRequest(c) {
+					return echo.NewHTTPError(http.StatusUnauthorized, "invalid session")
+				}
 				return c.Redirect(http.StatusFound, "/sign-in")
 			}
 

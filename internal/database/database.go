@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"strings"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -13,34 +14,30 @@ import (
 var migrations embed.FS
 
 func Open(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", dsn)
+	connStr := buildDSN(dsn)
+
+	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
-	success := false
-	defer func() {
-		if !success {
-			_ = db.Close()
-		}
-	}()
-
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		return nil, fmt.Errorf("setting WAL mode: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		return nil, fmt.Errorf("enabling foreign keys: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		return nil, fmt.Errorf("setting busy timeout: %w", err)
-	}
-
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
-	success = true
 	return db, nil
+}
+
+func buildDSN(dsn string) string {
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep +
+		"_pragma=journal_mode(WAL)" +
+		"&_pragma=foreign_keys(ON)" +
+		"&_pragma=busy_timeout(5000)"
 }
 
 func Migrate(db *sql.DB) error {

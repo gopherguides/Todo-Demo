@@ -10,12 +10,12 @@ function toggleDarkMode() {
 }
 
 function switchTab(status) {
-    document.querySelectorAll('[data-column]').forEach(col => {
+    document.querySelectorAll('#board > [data-column]').forEach(col => {
         col.classList.add('hidden');
         col.classList.remove('flex');
     });
-    document.querySelector(`[data-column="${status}"]`).classList.remove('hidden');
-    document.querySelector(`[data-column="${status}"]`).classList.add('flex');
+    document.querySelector(`#board > [data-column="${status}"]`).classList.remove('hidden');
+    document.querySelector(`#board > [data-column="${status}"]`).classList.add('flex');
 
     document.querySelectorAll('[data-tab]').forEach(tab => {
         tab.classList.remove('bg-primary-600', 'text-white');

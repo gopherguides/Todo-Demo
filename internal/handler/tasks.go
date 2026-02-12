@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -98,7 +99,10 @@ func (h *Handler) EditTask(c echo.Context) error {
 		UserID: userID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get task")
 	}
 
 	return Render(c, http.StatusOK, components.EditForm(task))
@@ -126,6 +130,17 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid status")
 	}
 
+	oldTask, err := h.queries.GetTask(c.Request().Context(), sqlc.GetTaskParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get task")
+	}
+
 	dueDate := c.FormValue("due_date")
 	var dueDateNull sql.NullString
 	if dueDate != "" {
@@ -142,7 +157,15 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		UserID:      userID,
 	})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update task")
+	}
+
+	if oldTask.Status != status {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
 	}
 
 	c.Response().Header().Set("HX-Trigger", `{"showToast": {"message": "Task updated", "type": "success"}}`)
@@ -157,12 +180,20 @@ func (h *Handler) DeleteTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid task id")
 	}
 
-	err = h.queries.DeleteTask(c.Request().Context(), sqlc.DeleteTaskParams{
+	result, err := h.queries.DeleteTask(c.Request().Context(), sqlc.DeleteTaskParams{
 		ID:     id,
 		UserID: userID,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete task")
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete task")
+	}
+	if rows == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "task not found")
 	}
 
 	c.Response().Header().Set("HX-Trigger", fmt.Sprintf(`{"showToast": {"message": "Task deleted", "type": "success"}, "taskDeleted": {"id": %d}}`, id))

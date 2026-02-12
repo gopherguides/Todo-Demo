@@ -23,11 +23,11 @@ SET title = ?, description = ?, priority = ?, status = ?, due_date = ?, updated_
 WHERE id = ? AND user_id = ?
 RETURNING *;
 
--- name: DeleteTask :exec
+-- name: DeleteTask :execresult
 DELETE FROM tasks
 WHERE id = ? AND user_id = ?;
 
--- name: UpdateTaskPosition :exec
+-- name: UpdateTaskPosition :execresult
 UPDATE tasks
 SET status = ?, position = ?, updated_at = datetime('now')
 WHERE id = ? AND user_id = ?;

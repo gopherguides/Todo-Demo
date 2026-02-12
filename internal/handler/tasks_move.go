@@ -39,7 +39,7 @@ func (h *Handler) MoveTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to calculate position")
 	}
 
-	err = h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
+	result, err := h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
 		Status:   req.Status,
 		Position: position,
 		ID:       id,
@@ -47,6 +47,14 @@ func (h *Handler) MoveTask(c echo.Context) error {
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to move task")
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to move task")
+	}
+	if rows == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "task not found")
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "position": position})
