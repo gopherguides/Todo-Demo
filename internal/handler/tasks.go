@@ -164,6 +164,28 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 	}
 
 	if oldTask.Status != status {
+		maxPos, err := h.queries.GetMaxPosition(c.Request().Context(), sqlc.GetMaxPositionParams{
+			UserID: userID,
+			Status: status,
+		})
+		if err == nil {
+			var position float64
+			switch v := maxPos.(type) {
+			case float64:
+				position = v + 1024
+			case int64:
+				position = float64(v) + 1024
+			default:
+				position = 1024
+			}
+			_, _ = h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
+				Status:   status,
+				Position: position,
+				ID:       id,
+				UserID:   userID,
+			})
+		}
+
 		c.Response().Header().Set("HX-Refresh", "true")
 		return c.NoContent(http.StatusOK)
 	}

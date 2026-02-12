@@ -54,7 +54,7 @@ function initSortable() {
 
                 fetch(`/tasks/${taskId}/move`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({
                         status: newStatus,
                         after_id: afterId,
