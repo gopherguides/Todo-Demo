@@ -8,6 +8,7 @@ import (
 	"os"
 	"syscall"
 
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/labstack/echo/v4"
 
 	"todo-demo/internal/config"
@@ -54,6 +55,8 @@ func main() {
 
 	h := handler.New(db, cfg)
 	h.Register(e)
+
+	e.Use(echo.WrapMiddleware(chimw.Logger))
 
 	ln, port, err := findOpenPort(cfg.Port, maxPortAttempts)
 	if err != nil {
