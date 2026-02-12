@@ -38,10 +38,14 @@ func (h *Handler) MoveTask(c echo.Context) error {
 
 	position, err := h.calculatePosition(c, userID, req)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusConflict, "referenced task no longer exists")
+		if isStaleNeighborError(err) {
+			position, err = h.nextPosition(c, userID, req.Status)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to calculate position")
+			}
+		} else {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to calculate position")
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to calculate position")
 	}
 
 	result, err := h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
@@ -66,25 +70,11 @@ func (h *Handler) MoveTask(c echo.Context) error {
 }
 
 func (h *Handler) calculatePosition(c echo.Context, userID string, req moveRequest) (float64, error) {
-	ctx := c.Request().Context()
-
 	if req.AfterID == 0 && req.BeforeID == 0 {
-		maxPos, err := h.queries.GetMaxPosition(ctx, sqlc.GetMaxPositionParams{
-			UserID: userID,
-			Status: req.Status,
-		})
-		if err != nil {
-			return 0, err
-		}
-		switch v := maxPos.(type) {
-		case float64:
-			return v + 1024, nil
-		case int64:
-			return float64(v) + 1024, nil
-		default:
-			return 1024, nil
-		}
+		return h.nextPosition(c, userID, req.Status)
 	}
+
+	ctx := c.Request().Context()
 
 	if req.AfterID != 0 && req.BeforeID == 0 {
 		afterPos, err := h.queries.GetTaskPosition(ctx, sqlc.GetTaskPositionParams{
@@ -125,4 +115,26 @@ func (h *Handler) calculatePosition(c echo.Context, userID string, req moveReque
 	}
 
 	return (afterPos + beforePos) / 2, nil
+}
+
+func (h *Handler) nextPosition(c echo.Context, userID string, status string) (float64, error) {
+	maxPos, err := h.queries.GetMaxPosition(c.Request().Context(), sqlc.GetMaxPositionParams{
+		UserID: userID,
+		Status: status,
+	})
+	if err != nil {
+		return 0, err
+	}
+	switch v := maxPos.(type) {
+	case float64:
+		return v + 1024, nil
+	case int64:
+		return float64(v) + 1024, nil
+	default:
+		return 1024, nil
+	}
+}
+
+func isStaleNeighborError(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
 }

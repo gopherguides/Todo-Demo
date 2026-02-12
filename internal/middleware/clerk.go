@@ -12,12 +12,24 @@ import (
 	"todo-demo/internal/ctxkeys"
 )
 
-func isAPIRequest(c echo.Context) bool {
-	if c.Request().Header.Get("HX-Request") == "true" {
-		return true
-	}
+func isHTMXRequest(c echo.Context) bool {
+	return c.Request().Header.Get("HX-Request") == "true"
+}
+
+func wantsJSON(c echo.Context) bool {
 	accept := c.Request().Header.Get("Accept")
 	return strings.Contains(accept, "application/json")
+}
+
+func unauthenticatedResponse(c echo.Context, message string) error {
+	if isHTMXRequest(c) {
+		c.Response().Header().Set("HX-Redirect", "/sign-in")
+		return c.NoContent(http.StatusUnauthorized)
+	}
+	if wantsJSON(c) {
+		return echo.NewHTTPError(http.StatusUnauthorized, message)
+	}
+	return c.Redirect(http.StatusFound, "/sign-in")
 }
 
 func ClerkAuth() echo.MiddlewareFunc {
@@ -25,20 +37,14 @@ func ClerkAuth() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			sessionToken, err := c.Cookie("__session")
 			if err != nil {
-				if isAPIRequest(c) {
-					return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
-				}
-				return c.Redirect(http.StatusFound, "/sign-in")
+				return unauthenticatedResponse(c, "authentication required")
 			}
 
 			claims, err := jwt.Verify(c.Request().Context(), &jwt.VerifyParams{
 				Token: sessionToken.Value,
 			})
 			if err != nil {
-				if isAPIRequest(c) {
-					return echo.NewHTTPError(http.StatusUnauthorized, "invalid session")
-				}
-				return c.Redirect(http.StatusFound, "/sign-in")
+				return unauthenticatedResponse(c, "invalid session")
 			}
 
 			userID := claims.Subject
