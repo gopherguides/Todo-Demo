@@ -7,15 +7,13 @@ linters:
     - staticcheck
     - unused
     - ineffassign
+  settings:
+    errcheck:
+      check-type-assertions: true
+  exclusions:
+    paths:
+      - internal/database/sqlc
 
 formatters:
   enable:
     - gofmt
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-
-issues:
-  exclude-dirs:
-    - internal/database/sqlc
