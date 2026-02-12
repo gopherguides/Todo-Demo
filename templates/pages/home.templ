@@ -32,5 +32,13 @@ templ Home(page meta.Page, site meta.SiteConfig) {
 				</div>
 			</div>
 		</div>
+		<script>
+			window.addEventListener('load', async function () {
+				await Clerk.load();
+				if (Clerk.user) {
+					window.location.href = '/board';
+				}
+			});
+		</script>
 	}
 }

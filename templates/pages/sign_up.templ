@@ -11,12 +11,14 @@ templ SignUp(page meta.Page, site meta.SiteConfig) {
 			<div id="sign-up"></div>
 		</div>
 		<script>
-			(async function() {
-				var key = document.querySelector('meta[name="clerk-publishable-key"]').content;
-				var clerk = new window.Clerk(key);
-				await clerk.load();
-				clerk.mountSignUp(document.getElementById('sign-up'));
-			})();
+			window.addEventListener('load', async function () {
+				await Clerk.load();
+				var el = document.getElementById('sign-up');
+				if (el) Clerk.mountSignUp(el, {
+					forceRedirectUrl: '/board',
+					signInUrl: '/sign-in'
+				});
+			});
 		</script>
 	}
 }

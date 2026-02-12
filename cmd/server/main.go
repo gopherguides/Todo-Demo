@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 
 	"github.com/labstack/echo/v4"
@@ -12,6 +14,8 @@ import (
 	"todo-demo/internal/handler"
 	mw "todo-demo/internal/middleware"
 )
+
+const maxPortAttempts = 20
 
 func main() {
 	setupLogger()
@@ -50,10 +54,40 @@ func main() {
 	h := handler.New(db, cfg)
 	h.Register(e)
 
-	addr := fmt.Sprintf(":%s", cfg.Port)
-	slog.Info("starting server", "addr", addr)
-	if err := e.Start(addr); err != nil {
+	ln, port, err := findOpenPort(cfg.Port, maxPortAttempts)
+	if err != nil {
+		slog.Error("no available port found", "start", cfg.Port, "attempts", maxPortAttempts, "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("starting server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
+	e.Listener = ln
+	if err := e.Start(""); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+func findOpenPort(startPort, maxAttempts int) (net.Listener, int, error) {
+	for i := range maxAttempts {
+		port := startPort + i
+		addr := fmt.Sprintf(":%d", port)
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, port, nil
+		}
+		if !isAddrInUse(err) {
+			return nil, 0, fmt.Errorf("listening on %s: %w", addr, err)
+		}
+		slog.Debug("port in use, trying next", "port", port)
+	}
+	return nil, 0, fmt.Errorf("ports %d-%d all in use", startPort, startPort+maxAttempts-1)
+}
+
+func isAddrInUse(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return opErr.Op == "listen"
+	}
+	return false
 }

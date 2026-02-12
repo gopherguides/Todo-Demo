@@ -60,15 +60,11 @@ templ Board(page meta.Page, site meta.SiteConfig, todoTasks []sqlc.Task, inProgr
 			</div>
 		</main>
 		<script>
-			(async function() {
-				var key = document.querySelector('meta[name="clerk-publishable-key"]').content;
-				if (key) {
-					var clerk = new window.Clerk(key);
-					await clerk.load();
-					var el = document.getElementById('user-button');
-					if (el) clerk.mountUserButton(el);
-				}
-			})();
+			window.addEventListener('load', async function () {
+				await Clerk.load();
+				var el = document.getElementById('user-button');
+				if (el) Clerk.mountUserButton(el);
+			});
 		</script>
 	}
 }
