@@ -3,6 +3,7 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -57,6 +58,27 @@ func TestClerkAuthRedirectsHTMXRequests(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+	if rec.Header().Get("HX-Redirect") != "/sign-in" {
+		t.Fatalf("expected HX-Redirect /sign-in, got %q", rec.Header().Get("HX-Redirect"))
+	}
+}
+
+func TestClerkAuthRedirectsHTMXTaskMutation(t *testing.T) {
+	e := echo.New()
+	e.Use(middleware.ClerkAuth())
+	e.POST("/tasks", func(c echo.Context) error {
+		return c.NoContent(http.StatusCreated)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/tasks", strings.NewReader("title=task"))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)

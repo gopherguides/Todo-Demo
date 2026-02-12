@@ -26,9 +26,13 @@ jobs:
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
       - name: Generate code
+        run: go generate ./cmd/server
+
+      - name: Verify code generation
         run: |
           sqlc generate -f sqlc/sqlc.yaml
           templ generate
+          git diff --exit-code
 
       - name: Install npm dependencies
         run: npm ci
