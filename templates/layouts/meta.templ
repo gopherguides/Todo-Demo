@@ -1,0 +1,11 @@
+package layouts
+
+import "todo-demo/internal/meta"
+
+templ Meta(page meta.Page, site meta.SiteConfig) {
+	<title>{ page.Title }</title>
+	<meta name="description" content={ page.Description }/>
+	<meta property="og:title" content={ page.Title }/>
+	<meta property="og:description" content={ page.Description }/>
+	<meta property="og:url" content={ site.URL + page.Path }/>
+}

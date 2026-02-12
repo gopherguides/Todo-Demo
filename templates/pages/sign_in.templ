@@ -1,0 +1,22 @@
+package pages
+
+import (
+	"todo-demo/internal/meta"
+	"todo-demo/templates/layouts"
+)
+
+templ SignIn(page meta.Page, site meta.SiteConfig) {
+	@layouts.Base(page, site) {
+		<div class="flex min-h-full items-center justify-center py-12">
+			<div id="sign-in"></div>
+		</div>
+		<script>
+			(async function() {
+				var key = document.querySelector('meta[name="clerk-publishable-key"]').content;
+				var clerk = new window.Clerk(key);
+				await clerk.load();
+				clerk.mountSignIn(document.getElementById('sign-in'));
+			})();
+		</script>
+	}
+}

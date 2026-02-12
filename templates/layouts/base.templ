@@ -1,0 +1,31 @@
+package layouts
+
+import "todo-demo/internal/meta"
+
+templ Base(page meta.Page, site meta.SiteConfig) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="clerk-publishable-key" content={ site.ClerkPublishableKey }/>
+			@Meta(page, site)
+			<link rel="stylesheet" href="/static/css/output.css"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+			<script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
+			<script>
+				(function() {
+					var t = localStorage.getItem('darkMode');
+					if (t === 'true' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+						document.documentElement.classList.add('dark');
+					}
+				})();
+			</script>
+		</head>
+		<body class="h-full">
+			{ children... }
+			<script src="/static/js/app.js"></script>
+		</body>
+	</html>
+}
