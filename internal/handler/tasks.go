@@ -155,6 +155,27 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get task")
 	}
 
+	statusChanged := oldTask.Status != status
+	var nextStatusPosition float64
+	if statusChanged {
+		maxPos, err := txQueries.GetMaxPosition(ctx, sqlc.GetMaxPositionParams{
+			UserID: userID,
+			Status: status,
+		})
+		if err != nil {
+			_ = tx.Rollback()
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get position for new status")
+		}
+		switch v := maxPos.(type) {
+		case float64:
+			nextStatusPosition = v + 1024
+		case int64:
+			nextStatusPosition = float64(v) + 1024
+		default:
+			nextStatusPosition = 1024
+		}
+	}
+
 	task, err := txQueries.UpdateTask(ctx, sqlc.UpdateTaskParams{
 		Title:       title,
 		Description: c.FormValue("description"),
@@ -172,29 +193,10 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update task")
 	}
 
-	statusChanged := oldTask.Status != status
-
-	if oldTask.Status != status {
-		maxPos, err := txQueries.GetMaxPosition(ctx, sqlc.GetMaxPositionParams{
-			UserID: userID,
-			Status: status,
-		})
-		if err != nil {
-			_ = tx.Rollback()
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get position for new status")
-		}
-		var position float64
-		switch v := maxPos.(type) {
-		case float64:
-			position = v + 1024
-		case int64:
-			position = float64(v) + 1024
-		default:
-			position = 1024
-		}
+	if statusChanged {
 		_, err = txQueries.UpdateTaskPosition(ctx, sqlc.UpdateTaskPositionParams{
 			Status:   status,
-			Position: position,
+			Position: nextStatusPosition,
 			ID:       id,
 			UserID:   userID,
 		})
