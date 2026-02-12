@@ -33,7 +33,7 @@ func main() {
 		slog.Error("opening database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := database.Migrate(db); err != nil {
 		slog.Error("running migrations", "error", err)

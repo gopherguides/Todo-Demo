@@ -1,3 +1,5 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
@@ -5,6 +7,10 @@ linters:
     - staticcheck
     - unused
     - ineffassign
+
+formatters:
+  enable:
+    - gofmt
 
 linters-settings:
   errcheck:

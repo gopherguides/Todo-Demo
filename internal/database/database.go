@@ -18,24 +18,28 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
+	success := false
+	defer func() {
+		if !success {
+			_ = db.Close()
+		}
+	}()
+
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("setting WAL mode: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("setting busy timeout: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
+	success = true
 	return db, nil
 }
 

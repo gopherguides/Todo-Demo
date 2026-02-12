@@ -16,6 +16,6 @@ func NewTestDB(t *testing.T) *sql.DB {
 	if err := database.Migrate(db); err != nil {
 		t.Fatalf("running migrations: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
