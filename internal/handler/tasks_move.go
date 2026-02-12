@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -36,6 +38,9 @@ func (h *Handler) MoveTask(c echo.Context) error {
 
 	position, err := h.calculatePosition(c, userID, req)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusConflict, "referenced task no longer exists")
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to calculate position")
 	}
 

@@ -168,22 +168,26 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 			UserID: userID,
 			Status: status,
 		})
-		if err == nil {
-			var position float64
-			switch v := maxPos.(type) {
-			case float64:
-				position = v + 1024
-			case int64:
-				position = float64(v) + 1024
-			default:
-				position = 1024
-			}
-			_, _ = h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
-				Status:   status,
-				Position: position,
-				ID:       id,
-				UserID:   userID,
-			})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get position for new status")
+		}
+		var position float64
+		switch v := maxPos.(type) {
+		case float64:
+			position = v + 1024
+		case int64:
+			position = float64(v) + 1024
+		default:
+			position = 1024
+		}
+		_, err = h.queries.UpdateTaskPosition(c.Request().Context(), sqlc.UpdateTaskPositionParams{
+			Status:   status,
+			Position: position,
+			ID:       id,
+			UserID:   userID,
+		})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to update task position")
 		}
 
 		c.Response().Header().Set("HX-Refresh", "true")
