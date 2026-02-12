@@ -130,8 +130,11 @@ document.addEventListener('htmx:afterRequest', (evt) => {
         }
     }
 
-    var mc = document.getElementById('modal-container');
-    if (mc) mc.innerHTML = '';
-    var cm = document.getElementById('create-modal');
-    if (cm) cm.classList.add('hidden');
+    const requestVerb = evt.detail.requestConfig?.verb?.toLowerCase();
+    if (evt.detail.successful && requestVerb && requestVerb !== 'get') {
+        var mc = document.getElementById('modal-container');
+        if (mc) mc.innerHTML = '';
+        var cm = document.getElementById('create-modal');
+        if (cm) cm.classList.add('hidden');
+    }
 });
