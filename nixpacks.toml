@@ -1,3 +1,8 @@
+providers = ["go", "node"]
+
+[phases.setup]
+nixPkgs = ['...', 'nodejs_20']
+
 [phases.install]
 cmds = [
   "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest",
