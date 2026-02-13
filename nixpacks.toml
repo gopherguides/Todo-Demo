@@ -1,0 +1,20 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "npm"]
+
+[phases.install]
+cmds = [
+  "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest",
+  "go install github.com/a-h/templ/cmd/templ@latest",
+  "npm ci",
+]
+
+[phases.build]
+cmds = [
+  "sqlc generate -f sqlc/sqlc.yaml",
+  "templ generate",
+  "npx @tailwindcss/cli -i static/css/input.css -o static/css/output.css --minify",
+  "go build -o out ./cmd/server",
+]
+
+[start]
+cmd = "./out"

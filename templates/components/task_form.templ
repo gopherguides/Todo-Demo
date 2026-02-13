@@ -1,0 +1,120 @@
+package components
+
+import (
+	"fmt"
+	"todo-demo/internal/database/sqlc"
+)
+
+templ CreateForm() {
+	<div class="modal-overlay" onclick="if(event.target===this) document.getElementById('create-modal').classList.add('hidden')">
+		<div class="modal-content">
+			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">New Task</h2>
+			<form
+				hx-post="/tasks"
+				hx-swap="none"
+				class="space-y-4"
+			>
+				@taskFormFields("", "", "medium", "todo", "")
+				<div class="flex justify-end gap-3 pt-2">
+					<button
+						type="button"
+						class="btn btn-secondary"
+						onclick="document.getElementById('create-modal').classList.add('hidden')"
+					>
+						Cancel
+					</button>
+					<button type="submit" class="btn btn-primary">
+						Create Task
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+templ EditForm(task sqlc.Task) {
+	<div class="modal-overlay" onclick="if(event.target===this) document.getElementById('modal-container').innerHTML=''">
+		<div class="modal-content">
+			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Edit Task</h2>
+			<form
+				hx-put={ fmt.Sprintf("/tasks/%d", task.ID) }
+				hx-target={ fmt.Sprintf("#task-%d", task.ID) }
+				hx-swap="outerHTML"
+				class="space-y-4"
+			>
+				@taskFormFields(task.Title, task.Description, task.Priority, task.Status, dueDateValue(task))
+				<div class="flex justify-end gap-3 pt-2">
+					<button
+						type="button"
+						class="btn btn-secondary"
+						onclick="document.getElementById('modal-container').innerHTML=''"
+					>
+						Cancel
+					</button>
+					<button type="submit" class="btn btn-primary">
+						Save Changes
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+func dueDateValue(task sqlc.Task) string {
+	if task.DueDate.Valid {
+		return task.DueDate.String
+	}
+	return ""
+}
+
+templ taskFormFields(title string, description string, priority string, status string, dueDate string) {
+	<div>
+		<label for="title" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
+		<input
+			type="text"
+			name="title"
+			id="title"
+			required
+			value={ title }
+			class="form-input mt-1"
+		/>
+	</div>
+	<div>
+		<label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+		<textarea
+			name="description"
+			id="description"
+			rows="3"
+			class="form-input mt-1"
+		>{ description }</textarea>
+	</div>
+	<div class="grid grid-cols-2 gap-4">
+		<div>
+			<label for="priority" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
+			<select name="priority" id="priority" class="form-select mt-1">
+				<option value="low" selected?={ priority == "low" }>Low</option>
+				<option value="medium" selected?={ priority == "medium" }>Medium</option>
+				<option value="high" selected?={ priority == "high" }>High</option>
+				<option value="urgent" selected?={ priority == "urgent" }>Urgent</option>
+			</select>
+		</div>
+		<div>
+			<label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+			<select name="status" id="status" class="form-select mt-1">
+				<option value="todo" selected?={ status == "todo" }>To Do</option>
+				<option value="in_progress" selected?={ status == "in_progress" }>In Progress</option>
+				<option value="done" selected?={ status == "done" }>Done</option>
+			</select>
+		</div>
+	</div>
+	<div>
+		<label for="due_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Due Date</label>
+		<input
+			type="date"
+			name="due_date"
+			id="due_date"
+			value={ dueDate }
+			class="form-input mt-1"
+		/>
+	</div>
+}

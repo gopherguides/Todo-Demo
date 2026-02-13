@@ -1,0 +1,25 @@
+package components
+
+func toastColor(toastType string) string {
+	if toastType == "error" {
+		return "bg-red-500"
+	}
+	return "bg-green-500"
+}
+
+templ Toast(message string, toastType string) {
+	<div
+		class={ "fixed right-4 top-4 z-[100] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg", toastColor(toastType) }
+		style="animation: toast-fade 3s ease-in-out forwards;"
+	>
+		{ message }
+	</div>
+	@templ.Raw(`<style>
+		@keyframes toast-fade {
+			0% { opacity: 0; transform: translateY(-10px); }
+			10% { opacity: 1; transform: translateY(0); }
+			80% { opacity: 1; transform: translateY(0); }
+			100% { opacity: 0; transform: translateY(-10px); }
+		}
+	</style>`)
+}

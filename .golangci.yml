@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+  settings:
+    errcheck:
+      check-type-assertions: true
+  exclusions:
+    paths:
+      - internal/database/sqlc
+
+formatters:
+  enable:
+    - gofmt

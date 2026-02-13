@@ -1,0 +1,5 @@
+export DATABASE_URL="data/todo.db"
+export PORT="8000"
+export CLERK_SECRET_KEY="sk_test_..."
+export CLERK_PUBLISHABLE_KEY="pk_test_..."
+export SITE_URL="http://localhost:8000"

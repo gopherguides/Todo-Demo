@@ -1,0 +1,70 @@
+package pages
+
+import (
+	"todo-demo/internal/database/sqlc"
+	"todo-demo/internal/meta"
+	"todo-demo/templates/components"
+	"todo-demo/templates/layouts"
+)
+
+templ Board(page meta.Page, site meta.SiteConfig, todoTasks []sqlc.Task, inProgressTasks []sqlc.Task, doneTasks []sqlc.Task) {
+	@layouts.Base(page, site) {
+		@components.Navbar()
+		<main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+			<div class="mb-6 flex items-center justify-between">
+				<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Board</h1>
+				<button
+					class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+					onclick="document.getElementById('create-modal').classList.remove('hidden')"
+				>
+					Add Task
+				</button>
+			</div>
+			<div class="flex gap-2 md:hidden mb-4">
+				<button
+					data-tab="todo"
+					class="flex-1 rounded-md bg-primary-600 text-white px-3 py-2 text-sm font-medium"
+					onclick="switchTab('todo')"
+				>
+					To Do
+				</button>
+				<button
+					data-tab="in_progress"
+					class="flex-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-2 text-sm font-medium"
+					onclick="switchTab('in_progress')"
+				>
+					In Progress
+				</button>
+				<button
+					data-tab="done"
+					class="flex-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-2 text-sm font-medium"
+					onclick="switchTab('done')"
+				>
+					Done
+				</button>
+			</div>
+			<div class="grid grid-cols-1 gap-6 md:grid-cols-3" id="board">
+				<div data-column="todo" class="flex flex-col">
+					@components.Column("To Do", "todo", "bg-blue-500", todoTasks)
+				</div>
+				<div data-column="in_progress" class="hidden md:flex flex-col">
+					@components.Column("In Progress", "in_progress", "bg-amber-500", inProgressTasks)
+				</div>
+				<div data-column="done" class="hidden md:flex flex-col">
+					@components.Column("Done", "done", "bg-green-500", doneTasks)
+				</div>
+			</div>
+			<div id="modal-container"></div>
+			<div id="create-modal" class="hidden">
+				@components.CreateForm()
+			</div>
+		</main>
+		<script>
+			window.addEventListener('load', async function () {
+				await Clerk.load();
+				var el = document.getElementById('user-button');
+				if (el) Clerk.mountUserButton(el);
+			});
+		</script>
+	}
+}

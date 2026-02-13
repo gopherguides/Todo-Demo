@@ -1,0 +1,29 @@
+package components
+
+import (
+	"fmt"
+	"todo-demo/internal/database/sqlc"
+)
+
+templ Column(title string, status string, color string, tasks []sqlc.Task) {
+	<div class="flex flex-col rounded-lg bg-gray-100 p-4 dark:bg-gray-800" data-column={ status }>
+		<div class="mb-4 flex items-center gap-2">
+			<span class={ "inline-block h-3 w-3 rounded-full", color }></span>
+			<h2 class="text-sm font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+				{ title }
+			</h2>
+			<span class="task-count ml-auto rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+				{ fmt.Sprintf("%d", len(tasks)) }
+			</span>
+		</div>
+		<div
+			id={ status }
+			data-status={ status }
+			class="sortable-column flex min-h-[200px] flex-col gap-3 overflow-y-auto"
+		>
+			for _, task := range tasks {
+				@TaskCard(task)
+			}
+		</div>
+	</div>
+}

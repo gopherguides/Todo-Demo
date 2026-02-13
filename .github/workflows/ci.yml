@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install tools
+        run: |
+          go install github.com/a-h/templ/cmd/templ@latest
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+      - name: Generate code
+        run: go generate ./cmd/server
+
+      - name: Verify code generation
+        run: |
+          sqlc generate -f sqlc/sqlc.yaml
+          templ generate
+          git diff --exit-code
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build CSS
+        run: npm run css:build
+
+      - name: Build
+        run: go build ./cmd/server
+
+      - name: Test
+        run: go test ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.9.0

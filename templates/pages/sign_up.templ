@@ -1,0 +1,24 @@
+package pages
+
+import (
+	"todo-demo/internal/meta"
+	"todo-demo/templates/layouts"
+)
+
+templ SignUp(page meta.Page, site meta.SiteConfig) {
+	@layouts.Base(page, site) {
+		<div class="flex min-h-full items-center justify-center py-12">
+			<div id="sign-up"></div>
+		</div>
+		<script>
+			window.addEventListener('load', async function () {
+				await Clerk.load();
+				var el = document.getElementById('sign-up');
+				if (el) Clerk.mountSignUp(el, {
+					forceRedirectUrl: '/board',
+					signInUrl: '/sign-in'
+				});
+			});
+		</script>
+	}
+}
