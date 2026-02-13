@@ -1,5 +1,8 @@
 providers = ["go", "node"]
 
+[variables]
+GOTOOLCHAIN = "local"
+
 [phases.install]
 cmds = [
   "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest",
