@@ -9,8 +9,8 @@ cmds = [
 
 [phases.build]
 cmds = [
-  "sqlc generate -f sqlc/sqlc.yaml",
-  "templ generate",
+  "/root/go/bin/sqlc generate -f sqlc/sqlc.yaml",
+  "/root/go/bin/templ generate",
   "npx @tailwindcss/cli -i static/css/input.css -o static/css/output.css --minify",
   "go build -o out ./cmd/server",
 ]
