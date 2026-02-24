@@ -26,6 +26,7 @@ jobs:
           BASE_REF: origin/${{ github.base_ref }}
           HEAD_REF: HEAD
           GOPHER_GUIDES_API_KEY: ${{ secrets.GOPHER_GUIDES_API_KEY }}
+          REVIEW_API_URL: ${{ vars.REVIEW_API_URL }}
           OUT_PATH: /tmp/agentic_review.md
         run: |
           python .github/scripts/agentic_review.py
