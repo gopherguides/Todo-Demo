@@ -37,6 +37,7 @@ func (h *Handler) Register(e *echo.Echo) {
 
 	protected := e.Group("", mw.ClerkAuth())
 	protected.GET("/board", h.Board)
+	protected.GET("/tasks/search", h.SearchTasks)
 	protected.POST("/tasks", h.CreateTask)
 	protected.GET("/tasks/:id/edit", h.EditTask)
 	protected.PUT("/tasks/:id", h.UpdateTask)

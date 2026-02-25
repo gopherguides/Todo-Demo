@@ -40,3 +40,9 @@ WHERE user_id = ? AND status = ?;
 -- name: GetTaskPosition :one
 SELECT position FROM tasks
 WHERE id = ? AND user_id = ?;
+
+-- name: SearchTasks :many
+SELECT * FROM tasks
+WHERE user_id = ?
+  AND (title LIKE '%' || sqlc.arg(query) || '%' OR description LIKE '%' || sqlc.arg(query) || '%')
+ORDER BY position ASC;

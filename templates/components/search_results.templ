@@ -1,0 +1,32 @@
+package components
+
+import (
+	"fmt"
+	"todo-demo/internal/database/sqlc"
+)
+
+func resultCountLabel(n int) string {
+	if n == 1 {
+		return "1 result"
+	}
+	return fmt.Sprintf("%d results", n)
+}
+
+templ SearchResults(tasks []sqlc.Task, query string) {
+	<div id="search-results">
+		if len(tasks) == 0 {
+			<p class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+				No tasks matching &quot;{ query }&quot;
+			</p>
+		} else {
+			<p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+				{ resultCountLabel(len(tasks)) }
+			</p>
+			<div class="space-y-2">
+				for _, task := range tasks {
+					@TaskCard(task)
+				}
+			</div>
+		}
+	</div>
+}
