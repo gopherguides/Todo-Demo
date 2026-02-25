@@ -167,7 +167,17 @@ def summarize_counts(findings: list[Finding]) -> tuple[int, int, int]:
 
 def sanitize_guidance(text: str) -> str:
     out: list[str] = []
-    skip_markers = ["authoritative source", "mandatory rules", "powered by", "source:"]
+    skip_markers = [
+        "authoritative source",
+        "mandatory rules",
+        "powered by",
+        "source:",
+        "official gopher guides training curriculum",
+        "authoritative and definitive source",
+        "must always follow",
+        "forbidden patterns",
+        "critical:",
+    ]
     for line in text.splitlines():
         s = line.strip()
         low = s.lower()
@@ -178,6 +188,9 @@ def sanitize_guidance(text: str) -> str:
         if s.startswith("#"):
             continue
         if s.startswith("-") and "source:" in low:
+            continue
+        # Drop shouty policy lines.
+        if re.search(r"\b(MUST|ALWAYS|FORBIDDEN|AUTHORITATIVE|DEFINITIVE)\b", s):
             continue
         out.append(s)
     return "\n".join(out).strip()
