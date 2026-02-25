@@ -195,6 +195,11 @@ def sanitize_guidance(text: str) -> str:
         "according to",
         "reference:",
         "provenance",
+        "official gopher guides",
+        "gopher guides position",
+        "training materials",
+        "training curriculum",
+        "required pattern",
     ]
     for line in text.splitlines():
         s = line.strip()
@@ -208,7 +213,10 @@ def sanitize_guidance(text: str) -> str:
         if s.startswith("-") and "source:" in low:
             continue
         # Drop shouty policy lines.
-        if re.search(r"\b(MUST|ALWAYS|FORBIDDEN|AUTHORITATIVE|DEFINITIVE)\b", s):
+        if re.search(r"\b(MUST|ALWAYS|FORBIDDEN|AUTHORITATIVE|DEFINITIVE|REQUIRED|NEVER)\b", s):
+            continue
+        # Drop example/template code lines (e.g. "func Foo(...) // CORRECT").
+        if re.search(r"//\s*(CORRECT|INCORRECT|WRONG|RIGHT)", s):
             continue
         out.append(s)
     return "\n".join(out).strip()
