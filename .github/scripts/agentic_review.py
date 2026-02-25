@@ -80,17 +80,44 @@ def summarize_counts(findings: list[Finding]) -> tuple[int, int, int]:
 
 
 def sanitize_guidance(text: str) -> str:
-    """Remove noisy/irrelevant provenance lines from API output."""
+    """Remove noisy/irrelevant provenance and boilerplate lines."""
     out: list[str] = []
+    skip_markers = [
+        "authoritative source",
+        "mandatory rules",
+        "powered by",
+        "source:",
+    ]
     for line in text.splitlines():
         s = line.strip()
-        if s.lower().startswith("source:"):
+        low = s.lower()
+        if not s:
             continue
-        # Drop simple markdown bullets that only contain source references.
-        if s.startswith("-") and "source:" in s.lower():
+        if any(m in low for m in skip_markers):
             continue
-        out.append(line)
+        if s.startswith("#"):
+            # Drop giant heading blocks from model output.
+            continue
+        # Drop markdown bullets that only contain source references.
+        if s.startswith("-") and "source:" in low:
+            continue
+        out.append(s)
     return "\n".join(out).strip()
+
+
+def compact_guidance(text: str, max_lines: int = 8) -> list[str]:
+    """Produce concise, review-style bullets from verbose API content."""
+    lines = [ln.strip("- ").strip() for ln in text.splitlines() if ln.strip()]
+    picks: list[str] = []
+    for ln in lines:
+        if len(ln) < 25:
+            continue
+        if "forbidden patterns" in ln.lower():
+            continue
+        picks.append(ln)
+        if len(picks) >= max_lines:
+            break
+    return picks
 
 
 def main() -> int:
@@ -148,14 +175,23 @@ def main() -> int:
     else:
         sections.append("- No heuristic red flags triggered.")
 
+    concise = compact_guidance(content)
+
     sections.extend([
         "",
-        "### Gopher Guides guidance",
+        "### API-assisted review summary",
+    ])
+    if concise:
+        sections.extend([f"- {line}" for line in concise])
+    else:
+        sections.append("- No concise guidance returned.")
+
+    sections.extend([
         "",
-        content[:9000] if content else "No guidance returned.",
-        "",
-        "---",
-        "_This review is advisory. Human review and CI gates remain required._",
+        "### Reviewer next actions",
+        "- Verify only high/medium findings; ignore low-noise items if not relevant to changed lines.",
+        "- Confirm tests cover touched behavior and edge cases.",
+        "- Treat this as advisory; human review and CI gates are required.",
     ])
 
     with open(out_path, "w") as f:
