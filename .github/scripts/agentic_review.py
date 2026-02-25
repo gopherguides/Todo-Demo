@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from urllib import request
 
 DEFAULT_API_URL = "https://gopherguides.com/api/gopher-ai/review"
@@ -12,6 +12,15 @@ DEFAULT_API_URL = "https://gopherguides.com/api/gopher-ai/review"
 
 @dataclass
 class Finding:
+    severity: str
+    confidence: str
+    message: str
+
+
+@dataclass
+class InlineFinding:
+    path: str
+    line: int
     severity: str
     confidence: str
     message: str
@@ -34,6 +43,40 @@ def added_lines_only(diff: str) -> str:
         if ln.startswith("+"):
             lines.append(ln[1:])
     return "\n".join(lines)
+
+
+def parse_added_lines(diff: str) -> list[tuple[str, int, str]]:
+    """Return (path, new_line_no, added_line_content) from unified diff."""
+    results: list[tuple[str, int, str]] = []
+    cur_path = ""
+    new_line = 0
+
+    for raw in diff.splitlines():
+        if raw.startswith("+++ b/"):
+            cur_path = raw[6:].strip()
+            continue
+
+        if raw.startswith("@@"):
+            m = re.search(r"\+(\d+)(?:,(\d+))?", raw)
+            if m:
+                new_line = int(m.group(1))
+            continue
+
+        if raw.startswith("+") and not raw.startswith("+++"):
+            if cur_path and new_line > 0:
+                results.append((cur_path, new_line, raw[1:]))
+            new_line += 1
+            continue
+
+        if raw.startswith("-") and not raw.startswith("---"):
+            # Removed line; does not advance new file line number.
+            continue
+
+        # Context line
+        if raw.startswith(" "):
+            new_line += 1
+
+    return results
 
 
 def detect_heuristics(diff: str, added: str) -> list[Finding]:
@@ -63,6 +106,49 @@ def detect_heuristics(diff: str, added: str) -> list[Finding]:
     return findings
 
 
+def detect_inline_findings(diff: str) -> list[InlineFinding]:
+    candidates = parse_added_lines(diff)
+    findings: list[InlineFinding] = []
+
+    for path, line, text in candidates:
+        stripped = text.strip()
+
+        if re.search(r"\bcontext\.Background\(\)", stripped):
+            findings.append(InlineFinding(path, line, "medium", "high", "Prefer request-scoped context over context.Background() in request paths."))
+
+        if re.search(r"\bgo\s+\w", stripped):
+            findings.append(InlineFinding(path, line, "high", "medium", "New goroutine: verify cancellation, shutdown path, and error handling."))
+
+        if "panic(" in stripped:
+            findings.append(InlineFinding(path, line, "high", "high", "Avoid panic in user/request path unless process-fatal by design."))
+
+        if re.search(r"\b(TODO|FIXME)\b", stripped):
+            findings.append(InlineFinding(path, line, "low", "high", "TODO/FIXME in changed code: ensure follow-up issue exists."))
+
+        if "time.Sleep(" in stripped:
+            findings.append(InlineFinding(path, line, "medium", "medium", "time.Sleep detected; validate this is not masking race/timing issues."))
+
+        if path.endswith(".sql") and re.search(r"(SELECT|INSERT|UPDATE|DELETE)", stripped, re.I):
+            findings.append(InlineFinding(path, line, "medium", "medium", "SQL change: confirm indexing and query shape for expected cardinality."))
+
+        if re.search(r"\berr\s*:=", stripped) and "if err" not in stripped:
+            findings.append(InlineFinding(path, line, "low", "low", "New err assignment: confirm error is handled in nearby lines."))
+
+    # De-duplicate identical comments on same line/message.
+    seen: set[tuple[str, int, str]] = set()
+    unique: list[InlineFinding] = []
+    for f in findings:
+        key = (f.path, f.line, f.message)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(f)
+
+    # Keep signal high.
+    unique.sort(key=lambda x: (0 if x.severity == "high" else 1 if x.severity == "medium" else 2, x.path, x.line))
+    return unique[:20]
+
+
 def post_review(diff: str, key: str, api_url: str) -> dict:
     payload = json.dumps({"diff": diff}).encode("utf-8")
     req = request.Request(api_url, data=payload, method="POST")
@@ -80,14 +166,8 @@ def summarize_counts(findings: list[Finding]) -> tuple[int, int, int]:
 
 
 def sanitize_guidance(text: str) -> str:
-    """Remove noisy/irrelevant provenance and boilerplate lines."""
     out: list[str] = []
-    skip_markers = [
-        "authoritative source",
-        "mandatory rules",
-        "powered by",
-        "source:",
-    ]
+    skip_markers = ["authoritative source", "mandatory rules", "powered by", "source:"]
     for line in text.splitlines():
         s = line.strip()
         low = s.lower()
@@ -96,17 +176,14 @@ def sanitize_guidance(text: str) -> str:
         if any(m in low for m in skip_markers):
             continue
         if s.startswith("#"):
-            # Drop giant heading blocks from model output.
             continue
-        # Drop markdown bullets that only contain source references.
         if s.startswith("-") and "source:" in low:
             continue
         out.append(s)
     return "\n".join(out).strip()
 
 
-def compact_guidance(text: str, max_lines: int = 8) -> list[str]:
-    """Produce concise, review-style bullets from verbose API content."""
+def compact_guidance(text: str, max_lines: int = 6) -> list[str]:
     lines = [ln.strip("- ").strip() for ln in text.splitlines() if ln.strip()]
     picks: list[str] = []
     for ln in lines:
@@ -124,6 +201,7 @@ def main() -> int:
     base = os.getenv("BASE_REF", "origin/main")
     head = os.getenv("HEAD_REF", "HEAD")
     out_path = os.getenv("OUT_PATH", "/tmp/agentic_review.md")
+    findings_path = os.getenv("FINDINGS_PATH", "/tmp/agentic_findings.json")
     api_url = os.getenv("REVIEW_API_URL", DEFAULT_API_URL).strip() or DEFAULT_API_URL
 
     diff = run(["git", "diff", f"{base}...{head}", "--", "*.go", "*.sql", "go.mod", "go.sum"]).strip()
@@ -132,16 +210,21 @@ def main() -> int:
     if not diff:
         with open(out_path, "w") as f:
             f.write("No Go/SQL/module changes detected for agentic review.\n")
+        with open(findings_path, "w") as f:
+            json.dump([], f)
         return 0
 
     key = os.getenv("GOPHER_GUIDES_API_KEY", "").strip()
     if not key:
         with open(out_path, "w") as f:
             f.write("GOPHER_GUIDES_API_KEY not configured; skipping external review call.\n")
+        with open(findings_path, "w") as f:
+            json.dump([], f)
         return 0
 
     added = added_lines_only(diff)
     heuristics = detect_heuristics(diff, added)
+    inline = detect_inline_findings(diff)
     high, med, low = summarize_counts(heuristics)
 
     try:
@@ -150,37 +233,18 @@ def main() -> int:
     except Exception as e:
         content = f"API call failed: `{e}`"
 
+    concise = compact_guidance(content)
+
     sections = [
         "## 🤖 Agentic Go Review",
         "",
-        f"- Endpoint: `{api_url}`",
         f"- Files analyzed: **{len(files)}**",
+        f"- Inline comments posted: **{len(inline)}**",
         f"- Heuristic findings: **{len(heuristics)}** (high: {high}, medium: {med}, low: {low})",
         "",
-        "### Changed files",
+        "### API-assisted summary",
     ]
 
-    if files:
-        sections.extend([f"- `{f}`" for f in files[:30]])
-        if len(files) > 30:
-            sections.append(f"- … and {len(files) - 30} more")
-    else:
-        sections.append("- None")
-
-    sections.extend(["", "### Severity/Confidence findings"])
-
-    if heuristics:
-        for f in heuristics:
-            sections.append(f"- **[{f.severity.upper()} / {f.confidence.upper()}]** {f.message}")
-    else:
-        sections.append("- No heuristic red flags triggered.")
-
-    concise = compact_guidance(content)
-
-    sections.extend([
-        "",
-        "### API-assisted review summary",
-    ])
     if concise:
         sections.extend([f"- {line}" for line in concise])
     else:
@@ -189,13 +253,16 @@ def main() -> int:
     sections.extend([
         "",
         "### Reviewer next actions",
-        "- Verify only high/medium findings; ignore low-noise items if not relevant to changed lines.",
+        "- Prioritize HIGH and MEDIUM inline comments first.",
         "- Confirm tests cover touched behavior and edge cases.",
         "- Treat this as advisory; human review and CI gates are required.",
     ])
 
     with open(out_path, "w") as f:
         f.write("\n".join(sections) + "\n")
+
+    with open(findings_path, "w") as f:
+        json.dump([asdict(x) for x in inline], f)
 
     return 0
 
