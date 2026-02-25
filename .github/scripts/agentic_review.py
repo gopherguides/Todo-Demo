@@ -113,6 +113,7 @@ def detect_inline_findings(diff: str) -> list[InlineFinding]:
     for path, line, text in candidates:
         stripped = text.strip()
 
+        # High-signal only: no low-severity inline comments.
         if re.search(r"\bcontext\.Background\(\)", stripped):
             findings.append(InlineFinding(path, line, "medium", "high", "Prefer request-scoped context over context.Background() in request paths."))
 
@@ -122,17 +123,11 @@ def detect_inline_findings(diff: str) -> list[InlineFinding]:
         if "panic(" in stripped:
             findings.append(InlineFinding(path, line, "high", "high", "Avoid panic in user/request path unless process-fatal by design."))
 
-        if re.search(r"\b(TODO|FIXME)\b", stripped):
-            findings.append(InlineFinding(path, line, "low", "high", "TODO/FIXME in changed code: ensure follow-up issue exists."))
-
         if "time.Sleep(" in stripped:
             findings.append(InlineFinding(path, line, "medium", "medium", "time.Sleep detected; validate this is not masking race/timing issues."))
 
         if path.endswith(".sql") and re.search(r"(SELECT|INSERT|UPDATE|DELETE)", stripped, re.I):
             findings.append(InlineFinding(path, line, "medium", "medium", "SQL change: confirm indexing and query shape for expected cardinality."))
-
-        if re.search(r"\berr\s*:=", stripped) and "if err" not in stripped:
-            findings.append(InlineFinding(path, line, "low", "low", "New err assignment: confirm error is handled in nearby lines."))
 
     # De-duplicate identical comments on same line/message.
     seen: set[tuple[str, int, str]] = set()
@@ -144,9 +139,9 @@ def detect_inline_findings(diff: str) -> list[InlineFinding]:
         seen.add(key)
         unique.append(f)
 
-    # Keep signal high.
-    unique.sort(key=lambda x: (0 if x.severity == "high" else 1 if x.severity == "medium" else 2, x.path, x.line))
-    return unique[:20]
+    # Keep signal high and cap comment volume.
+    unique.sort(key=lambda x: (0 if x.severity == "high" else 1, x.path, x.line))
+    return unique[:12]
 
 
 def post_review(diff: str, key: str, api_url: str) -> dict:
