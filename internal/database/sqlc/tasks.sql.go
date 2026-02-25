@@ -214,6 +214,52 @@ func (q *Queries) ListTasksByUser(ctx context.Context, userID string) ([]Task, e
 	return items, nil
 }
 
+const searchTasks = `-- name: SearchTasks :many
+SELECT id, user_id, title, description, priority, status, position, due_date, created_at, updated_at FROM tasks
+WHERE user_id = ?
+  AND (title LIKE '%' || ?2 || '%' OR description LIKE '%' || ?2 || '%')
+ORDER BY position ASC
+`
+
+type SearchTasksParams struct {
+	UserID string
+	Query  sql.NullString
+}
+
+func (q *Queries) SearchTasks(ctx context.Context, arg SearchTasksParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, searchTasks, arg.UserID, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Title,
+			&i.Description,
+			&i.Priority,
+			&i.Status,
+			&i.Position,
+			&i.DueDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTask = `-- name: UpdateTask :one
 UPDATE tasks
 SET title = ?, description = ?, priority = ?, status = ?, due_date = ?, updated_at = datetime('now')

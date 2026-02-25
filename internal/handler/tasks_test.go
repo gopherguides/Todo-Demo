@@ -137,3 +137,51 @@ func TestUpdateTaskStatusChangeRefreshesBoard(t *testing.T) {
 		t.Fatalf("expected HX-Refresh true, got %q", updateRec.Header().Get("HX-Refresh"))
 	}
 }
+
+func TestDuplicateTask(t *testing.T) {
+	h := newTestHandler(t)
+	e := echo.New()
+
+	createForm := "title=Original&description=Copy+this&priority=high&status=in_progress"
+	createReq := httptest.NewRequest(http.MethodPost, "/tasks", strings.NewReader(createForm))
+	createReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	createReq = createReq.WithContext(context.WithValue(createReq.Context(), ctxkeys.UserID, "test-user-1"))
+	createRec := httptest.NewRecorder()
+	createCtx := e.NewContext(createReq, createRec)
+	if err := h.CreateTask(createCtx); err != nil {
+		t.Fatalf("CreateTask() setup error: %v", err)
+	}
+
+	dupReq := httptest.NewRequest(http.MethodPost, "/tasks/1/duplicate", nil)
+	dupReq = dupReq.WithContext(context.WithValue(dupReq.Context(), ctxkeys.UserID, "test-user-1"))
+	dupRec := httptest.NewRecorder()
+	dupCtx := e.NewContext(dupReq, dupRec)
+	dupCtx.SetParamNames("id")
+	dupCtx.SetParamValues("1")
+
+	if err := h.DuplicateTask(dupCtx); err != nil {
+		t.Fatalf("DuplicateTask() returned error: %v", err)
+	}
+	if dupRec.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, dupRec.Code)
+	}
+	if dupRec.Header().Get("HX-Refresh") != "true" {
+		t.Fatalf("expected HX-Refresh true, got %q", dupRec.Header().Get("HX-Refresh"))
+	}
+
+	boardReq := httptest.NewRequest(http.MethodGet, "/board", nil)
+	boardReq = boardReq.WithContext(context.WithValue(boardReq.Context(), ctxkeys.UserID, "test-user-1"))
+	boardRec := httptest.NewRecorder()
+	boardCtx := e.NewContext(boardReq, boardRec)
+
+	if err := h.Board(boardCtx); err != nil {
+		t.Fatalf("Board() returned error: %v", err)
+	}
+	body := boardRec.Body.String()
+	if !strings.Contains(body, "Original") {
+		t.Fatalf("expected original task in board output")
+	}
+	if !strings.Contains(body, "Original (copy)") {
+		t.Fatalf("expected duplicated task title in board output")
+	}
+}

@@ -1,0 +1,87 @@
+name: Agentic Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build review report
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: HEAD
+          GOPHER_GUIDES_API_KEY: ${{ secrets.GOPHER_GUIDES_API_KEY }}
+          REVIEW_API_URL: ${{ vars.REVIEW_API_URL }}
+          OUT_PATH: /tmp/agentic_review.md
+          FINDINGS_PATH: /tmp/agentic_findings.json
+        run: |
+          python .github/scripts/agentic_review.py
+
+      - name: Post inline review + summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('/tmp/agentic_review.md', 'utf8');
+            const findings = JSON.parse(fs.readFileSync('/tmp/agentic_findings.json', 'utf8'));
+            const marker = '<!-- agentic-go-review -->';
+            const inlineMarker = '[agentic-review]';
+            const {owner, repo} = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            const issue_number = context.issue.number;
+            const commit_id = context.payload.pull_request.head.sha;
+
+            // Remove prior inline comments from this bot to keep noise down.
+            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {
+              owner, repo, pull_number, per_page: 100,
+            });
+            for (const c of reviewComments) {
+              if (c.user?.type === 'Bot' && (c.body || '').includes(inlineMarker)) {
+                await github.rest.pulls.deleteReviewComment({ owner, repo, comment_id: c.id });
+              }
+            }
+
+            const comments = findings.map(f => ({
+              path: f.path,
+              line: f.line,
+              side: 'RIGHT',
+              body: `${inlineMarker} **[${String(f.severity).toUpperCase()} / ${String(f.confidence).toUpperCase()}]** ${f.message}`,
+            }));
+
+            if (comments.length > 0) {
+              await github.rest.pulls.createReview({
+                owner,
+                repo,
+                pull_number,
+                commit_id,
+                event: 'COMMENT',
+                body: 'Agentic inline review comments posted for changed lines.',
+                comments,
+              });
+            }
+
+            const finalBody = `${marker}\n${summary}`;
+            const issueComments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            const existing = issueComments.find(c => c.user?.type === 'Bot' && (c.body || '').includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: finalBody });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: finalBody });
+            }

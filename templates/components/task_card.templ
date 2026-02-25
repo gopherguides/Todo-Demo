@@ -31,6 +31,14 @@ templ TaskCard(task sqlc.Task) {
 			</span>
 			<div class="flex gap-1">
 				<button
+					hx-post={ fmt.Sprintf("/tasks/%d/duplicate", task.ID) }
+					hx-swap="none"
+					class="rounded p-1 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-300"
+					title="Duplicate task"
+				>
+					@templ.Raw(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h6a2 2 0 012 2v1h-2V4H6v8h1v2H6a2 2 0 01-2-2V4z"/><path d="M9 8a2 2 0 012-2h5a2 2 0 012 2v8a2 2 0 01-2 2h-5a2 2 0 01-2-2V8zm2 0h5v8h-5V8z"/></svg>`)
+				</button>
+				<button
 					hx-get={ fmt.Sprintf("/tasks/%d/edit", task.ID) }
 					hx-target="#modal-container"
 					hx-swap="innerHTML"

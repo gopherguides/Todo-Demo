@@ -219,6 +219,55 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 	return Render(c, http.StatusOK, components.TaskCard(task))
 }
 
+func (h *Handler) DuplicateTask(c echo.Context) error {
+	userID := mw.GetUserID(c)
+	ctx := c.Request().Context()
+
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid task id")
+	}
+
+	task, err := h.queries.GetTask(ctx, sqlc.GetTaskParams{ID: id, UserID: userID})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "task not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load task")
+	}
+
+	maxPos, err := h.queries.GetMaxPosition(ctx, sqlc.GetMaxPositionParams{UserID: userID, Status: task.Status})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get position")
+	}
+
+	position := 1024.0
+	switch v := maxPos.(type) {
+	case float64:
+		position = v + 1024
+	case int64:
+		position = float64(v) + 1024
+	}
+
+	copyTitle := task.Title + " (copy)"
+	_, err = h.queries.CreateTask(ctx, sqlc.CreateTaskParams{
+		UserID:      userID,
+		Title:       copyTitle,
+		Description: task.Description,
+		Priority:    task.Priority,
+		Status:      task.Status,
+		Position:    position,
+		DueDate:     task.DueDate,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to duplicate task")
+	}
+
+	c.Response().Header().Set("HX-Refresh", "true")
+	c.Response().Header().Set("HX-Trigger", `{"showToast": {"message": "Task duplicated", "type": "success"}}`)
+	return c.NoContent(http.StatusCreated)
+}
+
 func (h *Handler) DeleteTask(c echo.Context) error {
 	userID := mw.GetUserID(c)
 
