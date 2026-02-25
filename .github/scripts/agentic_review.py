@@ -79,6 +79,20 @@ def summarize_counts(findings: list[Finding]) -> tuple[int, int, int]:
     return high, med, low
 
 
+def sanitize_guidance(text: str) -> str:
+    """Remove noisy/irrelevant provenance lines from API output."""
+    out: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.lower().startswith("source:"):
+            continue
+        # Drop simple markdown bullets that only contain source references.
+        if s.startswith("-") and "source:" in s.lower():
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 def main() -> int:
     base = os.getenv("BASE_REF", "origin/main")
     head = os.getenv("HEAD_REF", "HEAD")
@@ -105,7 +119,7 @@ def main() -> int:
 
     try:
         api = post_review(diff[:120000], key, api_url)
-        content = (api.get("content") or "").strip()
+        content = sanitize_guidance((api.get("content") or ""))
     except Exception as e:
         content = f"API call failed: `{e}`"
 
