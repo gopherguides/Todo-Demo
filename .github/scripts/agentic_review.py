@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
-from urllib import request
+from urllib import parse, request
 
 DEFAULT_API_URL = "https://gopherguides.com/api/gopher-ai/review"
 
@@ -111,31 +111,7 @@ MAX_COMMENTS_PER_FILE = 3
 MAX_COMMENTS_PER_PR = 8
 
 
-def detect_inline_findings(diff: str) -> list[InlineFinding]:
-    candidates = parse_added_lines(diff)
-    findings: list[InlineFinding] = []
-
-    for path, line, text in candidates:
-        stripped = text.strip()
-
-        if re.search(r"\bcontext\.Background\(\)", stripped):
-            findings.append(InlineFinding(path, line, "medium", "high", "Prefer request-scoped context over context.Background() in request paths."))
-
-        if re.search(r"\bgo\s+\w", stripped):
-            findings.append(InlineFinding(path, line, "high", "medium", "New goroutine: verify cancellation, shutdown path, and error handling."))
-
-        if "panic(" in stripped:
-            findings.append(InlineFinding(path, line, "high", "high", "Avoid panic in user/request path unless process-fatal by design."))
-
-        if "time.Sleep(" in stripped:
-            findings.append(InlineFinding(path, line, "medium", "medium", "time.Sleep detected; validate this is not masking race/timing issues."))
-
-        if path.endswith(".sql") and re.search(r"(SELECT|INSERT|UPDATE|DELETE)", stripped, re.I):
-            findings.append(InlineFinding(path, line, "medium", "medium", "SQL change: confirm indexing and query shape for expected cardinality."))
-
-    # Drop low-confidence findings to keep signal high.
-    findings = [f for f in findings if CONFIDENCE_RANK.get(f.confidence, 0) >= 1]
-
+def dedupe_and_cap_inline(findings: list[InlineFinding]) -> list[InlineFinding]:
     # De-duplicate identical comments on same line/message.
     seen: set[tuple[str, int, str]] = set()
     unique: list[InlineFinding] = []
@@ -161,9 +137,70 @@ def detect_inline_findings(diff: str) -> list[InlineFinding]:
     return capped[:MAX_COMMENTS_PER_PR]
 
 
+def detect_inline_findings(diff: str) -> list[InlineFinding]:
+    candidates = parse_added_lines(diff)
+    findings: list[InlineFinding] = []
+
+    for path, line, text in candidates:
+        stripped = text.strip()
+
+        if re.search(r"\bcontext\.Background\(\)", stripped):
+            findings.append(InlineFinding(path, line, "medium", "high", "Prefer request-scoped context over context.Background() in request paths."))
+
+        if re.search(r"\bgo\s+\w", stripped):
+            findings.append(InlineFinding(path, line, "high", "medium", "New goroutine: verify cancellation, shutdown path, and error handling."))
+
+        if "panic(" in stripped:
+            findings.append(InlineFinding(path, line, "high", "high", "Avoid panic in user/request path unless process-fatal by design."))
+
+        if "time.Sleep(" in stripped:
+            findings.append(InlineFinding(path, line, "medium", "medium", "time.Sleep detected; validate this is not masking race/timing issues."))
+
+        if path.endswith(".sql") and re.search(r"(SELECT|INSERT|UPDATE|DELETE)", stripped, re.I):
+            findings.append(InlineFinding(path, line, "medium", "medium", "SQL change: confirm indexing and query shape for expected cardinality."))
+
+    # Drop low-confidence findings to keep signal high.
+    findings = [f for f in findings if CONFIDENCE_RANK.get(f.confidence, 0) >= 1]
+    return dedupe_and_cap_inline(findings)
+
+
+def parse_api_inline_findings(api: dict, changed: set[str]) -> list[InlineFinding]:
+    raw = api.get("findings") or []
+    parsed: list[InlineFinding] = []
+    for item in raw:
+        try:
+            path = str(item.get("path") or "").strip()
+            line = int(item.get("line") or 0)
+            severity = str(item.get("severity") or "").lower().strip()
+            msg = str(item.get("message") or "").strip()
+            confidence_num = float(item.get("confidence") or 0)
+        except Exception:
+            continue
+
+        if not path or not msg or line <= 0:
+            continue
+        if path not in changed:
+            continue
+        if severity not in {"high", "medium"}:
+            continue
+        if confidence_num < 0.55:
+            continue
+
+        confidence = "high" if confidence_num >= 0.8 else "medium"
+        parsed.append(InlineFinding(path, line, severity, confidence, msg))
+
+    return dedupe_and_cap_inline(parsed)
+
+
 def post_review(diff: str, key: str, api_url: str) -> dict:
+    # Prefer concise machine-friendly format when supported by API.
+    parts = parse.urlsplit(api_url)
+    q = parse.parse_qs(parts.query, keep_blank_values=True)
+    q.setdefault("format", ["concise"])
+    url = parse.urlunsplit((parts.scheme, parts.netloc, parts.path, parse.urlencode(q, doseq=True), parts.fragment))
+
     payload = json.dumps({"diff": diff}).encode("utf-8")
-    req = request.Request(api_url, data=payload, method="POST")
+    req = request.Request(url, data=payload, method="POST")
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
     with request.urlopen(req, timeout=90) as resp:
@@ -266,16 +303,25 @@ def main() -> int:
 
     added = added_lines_only(diff)
     heuristics = detect_heuristics(diff, added)
-    inline = detect_inline_findings(diff)
+    heuristic_inline = detect_inline_findings(diff)
     high, med, low = summarize_counts(heuristics)
 
+    api: dict = {}
+    api_summary_lines: list[str] = []
+    api_inline: list[InlineFinding] = []
+    api_error = ""
     try:
         api = post_review(diff[:120000], key, api_url)
-        content = sanitize_guidance((api.get("content") or ""))
-    except Exception as e:
-        content = f"API call failed: `{e}`"
+        api_inline = parse_api_inline_findings(api, set(files))
 
-    concise = compact_guidance(content)
+        # Fallback summary text support for legacy API responses.
+        content = sanitize_guidance((api.get("content") or ""))
+        api_summary_lines = compact_guidance(content)
+    except Exception as e:
+        api_error = str(e)
+
+    # Prefer API findings when available; fallback to heuristic inline findings.
+    inline = api_inline if api_inline else heuristic_inline
 
     sections = [
         "## 🤖 Agentic Go Review",
@@ -283,14 +329,13 @@ def main() -> int:
         f"- Files analyzed: **{len(files)}**",
         f"- Inline comments posted: **{len(inline)}**",
         f"- Heuristic findings: **{len(heuristics)}** (high: {high}, medium: {med}, low: {low})",
-        "",
-        "### API-assisted summary",
+        f"- API findings (concise): **{len(api.get('findings') or [])}**",
     ]
 
-    if concise:
-        sections.extend([f"- {line}" for line in concise])
-    else:
-        sections.append("- No concise guidance returned.")
+    if api_error:
+        sections.extend(["", "### API status", f"- API call failed: `{api_error}`"])
+    elif api_summary_lines:
+        sections.extend(["", "### API highlights", *[f"- {line}" for line in api_summary_lines[:3]]])
 
     sections.extend([
         "",
