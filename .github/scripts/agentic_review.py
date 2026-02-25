@@ -218,6 +218,9 @@ def sanitize_guidance(text: str) -> str:
         # Drop example/template code lines (e.g. "func Foo(...) // CORRECT").
         if re.search(r"//\s*(CORRECT|INCORRECT|WRONG|RIGHT)", s):
             continue
+        # Drop curriculum/training references that aren't actionable review items.
+        if re.search(r"\b(gopher guides|training|curriculum)\b", low):
+            continue
         out.append(s)
     return "\n".join(out).strip()
 
