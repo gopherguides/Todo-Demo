@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/a-h/templ v0.3.977
-	github.com/clerk/clerk-sdk-go/v2 v2.5.1
+	github.com/clerk/clerk-sdk-go/v2 v2.6.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/pressly/goose/v3 v3.26.0
