@@ -1,8 +1,13 @@
 name: Agentic Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base branch to compare against
+        required: false
+        type: string
+        default: main
 
 permissions:
   contents: read
@@ -23,7 +28,7 @@ jobs:
 
       - name: Build review report
         env:
-          BASE_REF: origin/${{ github.base_ref }}
+          BASE_REF: origin/${{ inputs.base }}
           HEAD_REF: HEAD
           GOPHER_GUIDES_API_KEY: ${{ secrets.GOPHER_GUIDES_API_KEY }}
           REVIEW_API_URL: ${{ vars.REVIEW_API_URL }}
